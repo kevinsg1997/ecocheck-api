@@ -4,6 +4,16 @@ API REST do **EcoCheck**, um questionário educativo e anônimo sobre hábitos c
 
 > O EcoCheck é uma ferramenta educativa para reflexão sobre hábitos. A pontuação **não** mede a pegada ecológica real nem constitui avaliação científica.
 
+A apresentação completa do projeto (problema, objetivos, ODS, seção "Projeto Extensionista" e arquitetura) está no [README do `ecocheck-web`](https://github.com/kevinsg1997/ecocheck-web#readme). Este documento cobre a parte técnica da API.
+
+**Principais decisões**
+
+- A pontuação é **calculada somente no servidor**: o cliente envia apenas os ids das alternativas.
+- Cada alternativa guarda a própria pontuação (0–4). Isso dispensa "lógica invertida" e permite a opção "Não se aplica" (`NULL`), que sai do cálculo.
+- As perguntas são versionadas e criadas por seed na migration; elas são desativadas, nunca apagadas.
+- As estatísticas são agregadas, com cache, e protegidas por um **mínimo de 5 participantes** para detalhes e regiões.
+- O projeto usa camadas simples (Controllers → Services → DbContext), sem repositórios: o `DbContext` já faz esse papel.
+
 ## Tecnologias
 
 - .NET 9 / ASP.NET Core Web API
@@ -217,23 +227,45 @@ Nenhum segredo de produção fica no repositório. A connection string de `appse
 
 O repositório já contém `Dockerfile` e `railway.json` (build via Dockerfile, health check em `/health`, reinício em caso de falha).
 
-1. Suba o repositório `ecocheck-api` para o GitHub.
-2. Em [railway.com](https://railway.com), crie um projeto: **New Project → Deploy from GitHub repo → ecocheck-api**.
-3. No mesmo projeto, adicione o banco: **+ New → Database → PostgreSQL**.
-4. No serviço da API, aba **Variables**, adicione:
-   ```
-   DATABASE_URL=${{Postgres.DATABASE_URL}}
-   Database__ApplyMigrationsOnStartup=true
-   Cors__AllowedOrigins=https://SEU-PROJETO.vercel.app
-   ```
-   `${{Postgres.DATABASE_URL}}` é uma referência do Railway ao banco criado no passo 3 (use o nome exato do serviço do banco, se for diferente) e usa a rede privada do projeto.
-5. Em **Settings → Networking**, clique em **Generate Domain** para obter a URL pública (`https://...up.railway.app`).
-6. Aguarde o deploy e acesse `https://SUA-API.up.railway.app/health`; a resposta deve ser `Healthy`.
-7. Depois de publicar o front-end na Vercel, atualize `Cors__AllowedOrigins` com o domínio final (o Railway faz um novo deploy automaticamente).
+> **Custos:** o Railway oferece créditos de teste e, depois, planos pagos. Confira os valores atuais em [railway.com/pricing](https://railway.com/pricing) antes de publicar.
 
-Cada `git push` na branch principal gera um novo deploy. As migrations pendentes são aplicadas na inicialização enquanto `Database__ApplyMigrationsOnStartup=true`.
+### Passo a passo
 
-> O rate limiting fica em memória, adequado para uma única instância da API. Com várias réplicas, cada uma teria seu próprio contador.
+1. Em [railway.com](https://railway.com), entre com o GitHub e crie um projeto: **New Project → Deploy from GitHub repo → `ecocheck-api`**. O Railway lê o `railway.json` e usa o `Dockerfile`.
+2. No mesmo projeto, adicione o banco pelo botão de adicionar serviço (**+ New** / **Create**) → **Database** → **PostgreSQL**.
+3. No serviço da **API** (não no do banco), aba **Variables**, adicione:
+
+   | Variável | Valor |
+   |---|---|
+   | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
+   | `Database__ApplyMigrationsOnStartup` | `true` |
+   | `Cors__AllowedOrigins` | `https://SEU-PROJETO.vercel.app` (ou `http://localhost:5173` até publicar o front) |
+
+   `${{Postgres.DATABASE_URL}}` é uma *referência* do Railway: ele preenche a URL do banco criado no passo 2 usando a rede privada do projeto. Se o serviço do banco tiver outro nome, troque `Postgres` pelo nome exato. A API converte esse formato de URL para a connection string do Npgsql (`Infrastructure/DatabaseConnection.cs`).
+
+   A variável `PORT` é definida pelo próprio Railway. Não é preciso criá-la.
+4. Em **Settings → Networking → Public Networking**, clique em **Generate Domain** para obter a URL pública (`https://...up.railway.app`).
+5. Aguarde o deploy (aba **Deployments**). Na primeira inicialização, as migrations criam as tabelas e as 20 perguntas.
+6. Acesse `https://SUA-API.up.railway.app/health`. A resposta deve ser `Healthy`. Depois teste `https://SUA-API.up.railway.app/api/questionnaire`.
+7. Depois de publicar o front-end na Vercel, atualize `Cors__AllowedOrigins` com o domínio final. O Railway faz um novo deploy automaticamente.
+
+Cada `git push` na branch `main` gera um novo deploy. As migrations pendentes são aplicadas na inicialização enquanto `Database__ApplyMigrationsOnStartup=true`.
+
+### HTTPS em produção
+
+O Railway termina o HTTPS no proxy e encaminha a requisição para a API por HTTP. Com `ReverseProxy__Enabled=true` (padrão em produção), a API lê os headers `X-Forwarded-*`. Assim ela redireciona HTTP para HTTPS, envia HSTS e usa o IP real no rate limiting. O `/health` não é redirecionado, para o health check interno funcionar.
+
+### Problemas comuns
+
+| Sintoma | Causa provável |
+|---|---|
+| Deploy falha no health check | Banco inacessível: confira `DATABASE_URL` e se ela está no serviço da API. Veja os logs em **Deployments → View logs** |
+| `Nenhuma conexão com o banco configurada` nos logs | `DATABASE_URL` não definida no serviço da API |
+| O site mostra "Não foi possível conectar ao servidor" | `Cors__AllowedOrigins` não contém o domínio exato da Vercel (com `https://`, sem barra final) ou `VITE_API_URL` errada no front |
+| `429 Muitas requisições` em testes | Limite de 5 envios a cada 10 minutos por IP. Ajuste `RateLimiting__SubmitPermitLimit` temporariamente |
+| Tabelas não foram criadas | `Database__ApplyMigrationsOnStartup` não está como `true` |
+
+> O rate limiting e o cache das estatísticas ficam em memória, adequados para uma única instância da API. Com várias réplicas, cada uma teria seus próprios contadores e cache.
 
 ## Modelo de dados
 
