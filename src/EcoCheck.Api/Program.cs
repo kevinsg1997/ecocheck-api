@@ -4,6 +4,7 @@ using EcoCheck.Api.Data;
 using EcoCheck.Api.Infrastructure;
 using EcoCheck.Api.Services;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -26,10 +27,12 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ScoringService>();
 builder.Services.AddScoped<SurveyService>();
+builder.Services.AddSingleton<StatisticsCacheSignal>();
 builder.Services.AddScoped<StatisticsService>();
 
 builder.Services
-    .AddControllers()
+    // Erros de validação usam os mesmos nomes do JSON (camelCase), ex.: "answers".
+    .AddControllers(options => options.ModelMetadataDetailsProviders.Add(new SystemTextJsonValidationMetadataProvider()))
     .AddJsonOptions(options =>
     {
         // Enums trafegam como texto: "water", "good_habits", "consumption_and_mobility".
@@ -44,6 +47,8 @@ builder.Services.AddProblemDetails(options =>
     {
         context.ProblemDetails.Title = context.ProblemDetails.Status switch
         {
+            StatusCodes.Status400BadRequest when context.ProblemDetails is HttpValidationProblemDetails =>
+                "Os dados enviados são inválidos.",
             StatusCodes.Status404NotFound => "Recurso não encontrado.",
             StatusCodes.Status405MethodNotAllowed => "Método não permitido.",
             _ => context.ProblemDetails.Title

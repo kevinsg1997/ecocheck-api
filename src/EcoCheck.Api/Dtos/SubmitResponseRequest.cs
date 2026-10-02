@@ -11,6 +11,14 @@ public class SubmitResponseRequest
     [MinLength(1, ErrorMessage = "Envie ao menos uma resposta.")]
     [MaxLength(50, ErrorMessage = "Quantidade de respostas acima do permitido.")]
     public List<AnswerRequest> Answers { get; set; } = [];
+
+    /// <summary>Opcional. Código do país (ISO 3166-1 alfa-2), ex.: "BR".</summary>
+    [RegularExpression("^[A-Za-z]{2}$", ErrorMessage = "País inválido.")]
+    public string? CountryCode { get; set; }
+
+    /// <summary>Opcional. Sigla da UF, aceita somente quando o país é o Brasil, ex.: "SP".</summary>
+    [RegularExpression("^[A-Za-z]{2}$", ErrorMessage = "Estado inválido.")]
+    public string? StateCode { get; set; }
 }
 
 public class AnswerRequest

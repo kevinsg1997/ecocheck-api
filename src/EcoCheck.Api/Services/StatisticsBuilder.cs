@@ -9,6 +9,8 @@ public record ClassificationAggregate(Classification Classification, int Count);
 
 public record OptionAggregate(int OptionId, int Count);
 
+public record RegionAggregate(string Code, int Count, decimal AveragePercentage);
+
 public record StatisticsInput(
     int TotalParticipants,
     decimal? AveragePercentage,
@@ -16,7 +18,10 @@ public record StatisticsInput(
     IReadOnlyList<ClassificationAggregate> Classifications,
     IReadOnlyList<OptionAggregate> OptionCounts,
     IReadOnlyList<Question> ActiveQuestions,
-    DateTimeOffset GeneratedAt);
+    DateTimeOffset GeneratedAt,
+    IReadOnlyList<RegionAggregate>? Countries = null,
+    IReadOnlyList<RegionAggregate>? BrazilStates = null,
+    StatisticsFilter? Filter = null);
 
 /// <summary>
 /// Monta o DTO de estatísticas a partir dos agregados do banco (sem acesso a banco).
@@ -30,6 +35,16 @@ public static class StatisticsBuilder
 
     public static StatisticsDto Build(StatisticsInput input)
     {
+        var filter = input.Filter ?? StatisticsFilter.None;
+        var filterDto = new StatisticsFilterDto(filter.CountryCode, filter.StateCode);
+
+        // Região filtrada com poucas respostas: nenhum agregado é exposto,
+        // pois médias e contagens poderiam revelar resultados individuais.
+        if (filter.IsActive && input.TotalParticipants < MinimumParticipantsForDetails)
+        {
+            return Suppressed(filterDto, input.GeneratedAt);
+        }
+
         var categories = input.Categories
             .OrderBy(c => c.Category)
             .Select(c => new CategoryAverageDto(c.Category, Round(c.AveragePercentage)))
@@ -67,6 +82,8 @@ public static class StatisticsBuilder
             .ToList();
 
         return new StatisticsDto(
+            filterDto,
+            SummaryAvailable: true,
             input.TotalParticipants,
             input.AveragePercentage.HasValue ? Round(input.AveragePercentage.Value) : null,
             categories,
@@ -76,8 +93,42 @@ public static class StatisticsBuilder
             questions,
             topHabits,
             improvements,
+            BuildRegions(input),
             input.GeneratedAt);
     }
+
+    private static StatisticsDto Suppressed(StatisticsFilterDto filter, DateTimeOffset generatedAt) => new(
+        filter,
+        SummaryAvailable: false,
+        TotalParticipants: 0,
+        AveragePercentage: null,
+        Categories: [],
+        Classifications: [],
+        DetailsAvailable: false,
+        MinimumParticipantsForDetails,
+        Questions: [],
+        TopHabits: [],
+        ImprovementOpportunities: [],
+        new RegionStatisticsDto(0, [], []),
+        generatedAt);
+
+    private static RegionStatisticsDto BuildRegions(StatisticsInput input)
+    {
+        var countries = input.Countries ?? [];
+
+        return new RegionStatisticsDto(
+            countries.Sum(c => c.Count),
+            VisibleGroups(countries),
+            VisibleGroups(input.BrazilStates ?? []));
+    }
+
+    private static List<RegionGroupDto> VisibleGroups(IReadOnlyList<RegionAggregate> groups) =>
+        groups
+            .Where(g => g.Count >= MinimumParticipantsForDetails)
+            .OrderByDescending(g => g.Count)
+            .ThenBy(g => g.Code, StringComparer.Ordinal)
+            .Select(g => new RegionGroupDto(g.Code, g.Count, Round(g.AveragePercentage)))
+            .ToList();
 
     private static List<QuestionStatisticsDto> BuildQuestions(StatisticsInput input)
     {

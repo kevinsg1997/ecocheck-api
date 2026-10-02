@@ -102,9 +102,13 @@ Recebe as respostas anônimas, valida, calcula o resultado no servidor e salva. 
 ```json
 {
   "questionnaireVersion": 1,
-  "answers": [{ "questionId": 1, "optionId": 12 }]
+  "answers": [{ "questionId": 1, "optionId": 12 }],
+  "countryCode": "BR",
+  "stateCode": "SP"
 }
 ```
+
+`countryCode` (ISO 3166-1 alfa-2) e `stateCode` (sigla da UF) são **opcionais** e não afetam a pontuação. O estado só é aceito quando o país é `BR`.
 
 Resposta `200 OK`:
 
@@ -129,10 +133,22 @@ Resposta `400` no formato `ValidationProblemDetails` quando falta alguma pergunt
 
 ### `GET /api/statistics`
 
-Retorna **apenas dados agregados** de todas as participações (cache em memória de 60 s, invalidado a cada nova participação).
+Retorna **apenas dados agregados** das participações (cache em memória de 60 s por filtro, invalidado a cada nova participação).
+
+**Filtro opcional por região:**
+
+| Requisição | Considera |
+|---|---|
+| `GET /api/statistics` | Todas as participações |
+| `GET /api/statistics?country=BR` | Participações de um país (ISO 3166-1 alfa-2) |
+| `GET /api/statistics?country=BR&state=SP` | Participações de uma UF (somente com `country=BR`) |
+
+Se a região filtrada tiver **menos de 5 participantes**, a resposta vem com `summaryAvailable: false` e nenhum agregado (médias, distribuições e até o total, que vem como `0`), para não expor resultados individuais. As regiões que podem ser filtradas com dados são as listadas em `regions` da consulta sem filtro. Códigos inválidos retornam `400`.
 
 ```json
 {
+  "filter": { "countryCode": null, "stateCode": null },
+  "summaryAvailable": true,
   "totalParticipants": 42,
   "averagePercentage": 61.8,
   "categories": [{ "category": "water", "averagePercentage": 58.3 }],
@@ -146,11 +162,16 @@ Retorna **apenas dados agregados** de todas as participações (cache em memóri
   }],
   "topHabits": [{ "questionId": 6, "category": "energy", "text": "...", "averagePercentage": 88.1 }],
   "improvementOpportunities": [{ "questionId": 4, "category": "water", "text": "...", "averagePercentage": 21.4 }],
+  "regions": {
+    "participantsWithRegion": 30,
+    "countries": [{ "code": "BR", "participants": 28, "averagePercentage": 60.9 }],
+    "brazilStates": [{ "code": "SP", "participants": 12, "averagePercentage": 63.2 }]
+  },
   "generatedAt": "2026-09-30T18:00:00+00:00"
 }
 ```
 
-**Privacidade:** a distribuição por pergunta e os destaques (`questions`, `topHabits`, `improvementOpportunities`) só são retornados a partir de **5 participantes** (`detailsAvailable`). Com poucas respostas, esses dados poderiam revelar escolhas individuais.
+**Privacidade:** a distribuição por pergunta e os destaques (`questions`, `topHabits`, `improvementOpportunities`) só são retornados a partir de **5 participantes** (`detailsAvailable`). Da mesma forma, países e estados só aparecem em `regions` quando têm pelo menos 5 participantes. Com poucas respostas, esses dados poderiam revelar escolhas individuais.
 
 ### `GET /health`
 
@@ -220,8 +241,8 @@ Cada `git push` na branch principal gera um novo deploy. As migrations pendentes
 |---|---|
 | `questions` | Perguntas (categoria, texto, ordem, ativa) |
 | `question_options` | Alternativas com pontuação 0–4; `NULL` = "Não se aplica" |
-| `survey_responses` | Participação anônima: pontuação total, máximo, percentual, classificação |
+| `survey_responses` | Participação anônima: pontuação total, máximo, percentual, classificação e, se informados, país e UF |
 | `survey_answers` | Alternativa escolhida por pergunta (com cópia da pontuação) |
 | `survey_category_scores` | Pontuação por categoria de cada participação |
 
-Nenhuma tabela armazena nome, e-mail, IP, localização ou qualquer dado pessoal.
+Nenhuma tabela armazena nome, e-mail, IP, cidade, localização precisa ou qualquer dado pessoal. A região, quando informada, se limita a país e estado.

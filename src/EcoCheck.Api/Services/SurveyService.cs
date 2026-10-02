@@ -63,6 +63,8 @@ public class SurveyService(AppDbContext db, ScoringService scoring, TimeProvider
             MaxScore = score.MaxScore,
             Percentage = score.Percentage,
             Classification = score.Classification,
+            CountryCode = RegionCatalog.Normalize(request.CountryCode),
+            StateCode = RegionCatalog.Normalize(request.StateCode),
             Answers = chosen
                 .Select(c => new SurveyAnswer
                 {

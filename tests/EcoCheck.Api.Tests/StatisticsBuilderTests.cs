@@ -111,6 +111,82 @@ public class StatisticsBuilderTests
     }
 
     [Fact]
+    public void Build_Regions_OnlyShowsGroupsWithMinimumParticipants()
+    {
+        var input = Input(20) with
+        {
+            Countries = [new RegionAggregate("BR", 12, 61.234m), new RegionAggregate("PT", 4, 70m)],
+            BrazilStates = [new RegionAggregate("SP", 5, 58m), new RegionAggregate("RJ", 7, 64m), new RegionAggregate("AC", 1, 90m)]
+        };
+
+        var regions = StatisticsBuilder.Build(input).Regions;
+
+        Assert.Equal(16, regions.ParticipantsWithRegion);
+        var brazil = Assert.Single(regions.Countries);
+        Assert.Equal("BR", brazil.Code);
+        Assert.Equal(61.23m, brazil.AveragePercentage);
+        // Ordenado por número de participantes; AC (1) e PT (4) ficam ocultos.
+        Assert.Equal(new[] { "RJ", "SP" }, regions.BrazilStates.Select(s => s.Code));
+    }
+
+    [Fact]
+    public void Build_FilteredRegionBelowMinimum_SuppressesAllAggregates()
+    {
+        var input = Input(StatisticsBuilder.MinimumParticipantsForDetails - 1, new OptionAggregate(11, 4)) with
+        {
+            Filter = new StatisticsFilter("BR", "AC")
+        };
+
+        var result = StatisticsBuilder.Build(input);
+
+        Assert.False(result.SummaryAvailable);
+        Assert.Equal(0, result.TotalParticipants);
+        Assert.Null(result.AveragePercentage);
+        Assert.Empty(result.Categories);
+        Assert.Empty(result.Classifications);
+        Assert.Empty(result.Questions);
+        Assert.Equal("BR", result.Filter.CountryCode);
+        Assert.Equal("AC", result.Filter.StateCode);
+    }
+
+    [Fact]
+    public void Build_FilteredRegionWithEnoughParticipants_ReturnsSummary()
+    {
+        var input = Input(StatisticsBuilder.MinimumParticipantsForDetails, new OptionAggregate(11, 5)) with
+        {
+            Filter = new StatisticsFilter("BR")
+        };
+
+        var result = StatisticsBuilder.Build(input);
+
+        Assert.True(result.SummaryAvailable);
+        Assert.True(result.DetailsAvailable);
+        Assert.Equal(5, result.TotalParticipants);
+        Assert.Equal("BR", result.Filter.CountryCode);
+        Assert.Null(result.Filter.StateCode);
+    }
+
+    [Fact]
+    public void Build_WithoutFilter_FewParticipants_StillReturnsSummary()
+    {
+        var result = StatisticsBuilder.Build(Input(2));
+
+        Assert.True(result.SummaryAvailable);
+        Assert.Equal(2, result.TotalParticipants);
+        Assert.False(result.DetailsAvailable);
+    }
+
+    [Fact]
+    public void Build_NoRegionData_ReturnsEmptyRegions()
+    {
+        var regions = StatisticsBuilder.Build(Input(5)).Regions;
+
+        Assert.Equal(0, regions.ParticipantsWithRegion);
+        Assert.Empty(regions.Countries);
+        Assert.Empty(regions.BrazilStates);
+    }
+
+    [Fact]
     public void Build_HighlightsBestAndWorstHabitsWithoutOverlap()
     {
         var result = StatisticsBuilder.Build(Input(5,

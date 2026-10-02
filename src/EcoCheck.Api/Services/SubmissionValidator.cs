@@ -55,6 +55,11 @@ public static class SubmissionValidator
             errors["answers"] = [.. messages];
         }
 
+        RegionCatalog.Validate(
+            RegionCatalog.Normalize(request.CountryCode),
+            RegionCatalog.Normalize(request.StateCode),
+            errors);
+
         return errors;
     }
 }

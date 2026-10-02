@@ -92,6 +92,58 @@ public class SubmissionValidatorTests
         Assert.Contains("Há respostas para perguntas inexistentes ou inativas.", errors["answers"]);
     }
 
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("BR", null)]
+    [InlineData("BR", "SP")]
+    [InlineData("br", "rj")]
+    [InlineData("PT", null)]
+    public void Validate_ValidOptionalRegion_HasNoErrors(string? country, string? state)
+    {
+        var request = ValidRequest();
+        request.CountryCode = country;
+        request.StateCode = state;
+
+        Assert.Empty(SubmissionValidator.Validate(request, Questions, Version));
+    }
+
+    [Fact]
+    public void Validate_UnknownCountry_ReturnsError()
+    {
+        var request = ValidRequest();
+        request.CountryCode = "ZZ";
+
+        var errors = SubmissionValidator.Validate(request, Questions, Version);
+
+        Assert.True(errors.ContainsKey("countryCode"));
+    }
+
+    [Theory]
+    [InlineData(null, "SP")]
+    [InlineData("PT", "LI")]
+    public void Validate_StateOutsideBrazil_ReturnsError(string? country, string state)
+    {
+        var request = ValidRequest();
+        request.CountryCode = country;
+        request.StateCode = state;
+
+        var errors = SubmissionValidator.Validate(request, Questions, Version);
+
+        Assert.Contains("O estado só pode ser informado para o Brasil.", errors["stateCode"]);
+    }
+
+    [Fact]
+    public void Validate_UnknownBrazilState_ReturnsError()
+    {
+        var request = ValidRequest();
+        request.CountryCode = "BR";
+        request.StateCode = "XX";
+
+        var errors = SubmissionValidator.Validate(request, Questions, Version);
+
+        Assert.Contains("Estado inválido.", errors["stateCode"]);
+    }
+
     [Fact]
     public void Validate_OptionFromAnotherQuestion_ReturnsError()
     {

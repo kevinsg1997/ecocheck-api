@@ -25,6 +25,10 @@ public class SurveyResponseConfiguration : IEntityTypeConfiguration<SurveyRespon
             .HasForeignKey(c => c.SurveyResponseId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        builder.Property(r => r.CountryCode).HasMaxLength(2);
+        builder.Property(r => r.StateCode).HasMaxLength(2);
+
         builder.HasIndex(r => r.Classification);
+        builder.HasIndex(r => new { r.CountryCode, r.StateCode });
     }
 }
