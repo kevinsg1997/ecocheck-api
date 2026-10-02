@@ -1,5 +1,7 @@
 # EcoCheck API
 
+[![CI](https://github.com/kevinsg1997/ecocheck-api/actions/workflows/ci.yml/badge.svg)](https://github.com/kevinsg1997/ecocheck-api/actions/workflows/ci.yml)
+
 API REST do **EcoCheck**, um questionário educativo e anônimo sobre hábitos cotidianos ligados à água, energia, resíduos, consumo e mobilidade. Projeto extensionista do curso de Análise e Desenvolvimento de Sistemas.
 
 > O EcoCheck é uma ferramenta educativa para reflexão sobre hábitos. A pontuação **não** mede a pegada ecológica real nem constitui avaliação científica.
